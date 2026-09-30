@@ -1034,9 +1034,42 @@ startBtn.onclick=()=>{
 
 function loadData(rows){
   rows=rows.map(r=>{const o={};Object.keys(r).forEach(k=>o[String(k).trim()]=r[k]);return o;});
-  if(!["BITS ID","Course","Total Marks"].every(k=>rows.some(r=>k in r))){
-    alert("Missing columns. The file needs: BITS ID, Course, Total Marks.");return;
+
+  // Accept common spreadsheet header variants while keeping the rest of
+  // the grading logic unchanged. For example:
+  // "Student's BITS ID" -> "BITS ID"
+  const normalizeHeader=s=>String(s??"")
+    .trim()
+    .toLowerCase()
+    .replace(/[’']/g,"")
+    .replace(/[\s_\-]+/g,"");
+
+  const headers=[...new Set(rows.flatMap(r=>Object.keys(r)))];
+  const findHeader=aliases=>{
+    const normalized=new Map(headers.map(h=>[normalizeHeader(h),h]));
+    for(const alias of aliases){
+      const actual=normalized.get(normalizeHeader(alias));
+      if(actual)return actual;
+    }
+    return null;
+  };
+
+  const bitsIdKey=findHeader(["BITS ID","Student's BITS ID","Student BITS ID","BITS_ID","BITSID"]);
+  const courseKey=findHeader(["Course"]);
+  const marksKey=findHeader(["Total Marks"]);
+
+  if(!bitsIdKey||!courseKey||!marksKey){
+    alert("Missing columns. The file needs: BITS ID, Course, Total Marks.");
+    return;
   }
+
+  // Map detected headers to the canonical names used throughout the app.
+  rows=rows.map(r=>({
+    ...r,
+    "BITS ID":r[bitsIdKey],
+    "Course":r[courseKey],
+    "Total Marks":r[marksKey]
+  }));
   const seen=new Set(),clean=[],skipped=[],rounded=[];let dup=0,bad=0,frac=0;
   rows.forEach((r,i)=>{
     let m=r["Total Marks"];const id=String(r["BITS ID"]??"").trim();
